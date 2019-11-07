@@ -8,7 +8,7 @@ Currently just a copy of the snippets of code provided by the article found on
 Gradient Crescent
 """
 
-%matplotlib inline
+import matplotlib as plt
 from memory_profiler import memory_usage
 import os
 import pandas as pd
@@ -28,8 +28,7 @@ from matplotlib import figure
 import gc
 from path import Path
 
-!mkdir /kaggle/working/train
-!mkdir /kaggle/working/test
+
 
 def create_spectrogram(filename,name):
     plt.interactive(False)
