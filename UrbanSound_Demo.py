@@ -1,53 +1,36 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun Oct 27 20:31:16 2019
+Created on Sun Oct 27 19:50:06 2019
 
 @author: rrhoa
-
-Currently just a copy of the snippets of code provided by the article found on 
-Gradient Crescent
 """
 
-import matplotlib as plt
-from memory_profiler import memory_usage
-import os
-import pandas as pd
-from glob import glob
+import matplotlib.pyplot as plt
+from matplotlib import figure
+
+import librosa
+import librosa.display
 import numpy as np
+import os
+import re
+import pandas as pd
+
 
 from keras import layers
 from keras import models
 from keras.layers.advanced_activations import LeakyReLU
 from keras.optimizers import Adam
 import keras.backend as K
-import librosa
-import librosa.display
+
 import pylab
-import matplotlib.pyplot as plt
-from matplotlib import figure
 import gc
-from path import Path
 
+#filename = r"C:\Users\rrhoa\Documents\Classes\EEE488\ESC-50\audio\1-137-A-32.wav"
+#name = "1-137-A-32"
 
+directory = r"C:\Users\rrhoa\Documents\Classes\EEE488\UrbanSound8k\audio"
+directory2 = r"C:\Users\rrhoa\Documents\Classes\EEE488\ESC_capstone"
 
-def create_spectrogram(filename,name):
-    plt.interactive(False)
-    clip, sample_rate = librosa.load(filename, sr=None)
-    fig = plt.figure(figsize=[0.72,0.72])
-    ax = fig.add_subplot(111)
-    ax.axes.get_xaxis().set_visible(False)
-    ax.axes.get_yaxis().set_visible(False)
-    ax.set_frame_on(False)
-    S = librosa.feature.melspectrogram(y=clip, sr=sample_rate)
-    librosa.display.specshow(librosa.power_to_db(S, ref=np.max))
-    filename  = '/kaggle/working/train/' + name + '.jpg'
-    plt.savefig(filename, dpi=400, bbox_inches='tight',pad_inches=0)
-    plt.close()    
-    fig.clf()
-    plt.close(fig)
-    plt.close('all')
-    del filename,name,clip,sample_rate,fig,ax,S
-    
 def create_spectrogram_test(filename,name):
     plt.interactive(False)
     clip, sample_rate = librosa.load(filename, sr=None)
@@ -58,74 +41,82 @@ def create_spectrogram_test(filename,name):
     ax.set_frame_on(False)
     S = librosa.feature.melspectrogram(y=clip, sr=sample_rate)
     librosa.display.specshow(librosa.power_to_db(S, ref=np.max))
-    filename  = Path('/kaggle/working/test/' + name + '.jpg')
+    filename  = r"C:\Users\rrhoa\Documents\Classes\EEE488\ESC_capstone\test_files\\" + name + ".png"
     fig.savefig(filename, dpi=400, bbox_inches='tight',pad_inches=0)
     plt.close()    
     fig.clf()
     plt.close(fig)
     plt.close('all')
     del filename,name,clip,sample_rate,fig,ax,S
+
+def create_spectrogram_train(filename,name):
+    plt.interactive(False)
+    clip, sample_rate = librosa.load(filename, sr=None)
+    fig = plt.figure(figsize=[0.72,0.72])
+    ax = fig.add_subplot(111)
+    ax.axes.get_xaxis().set_visible(False)
+    ax.axes.get_yaxis().set_visible(False)
+    ax.set_frame_on(False)
+    S = librosa.feature.melspectrogram(y=clip, sr=sample_rate)
+    librosa.display.specshow(librosa.power_to_db(S, ref=np.max))
+    filename  = r"C:\Users\rrhoa\Documents\Classes\EEE488\ESC_capstone\train_files\\" + name + ".png"
+    fig.savefig(filename, dpi=400, bbox_inches='tight',pad_inches=0)
+    plt.close()    
+    fig.clf()
+    plt.close(fig)
+    plt.close('all')
+    del filename,name,clip,sample_rate,fig,ax,S
+
+#list all files in audio directory
+filenames = []
+for i in range(1,11):
+    filenames = filenames + os.listdir(directory+"\\fold"+str(i))
+
+
+#split file names into test and train based on folds
+test_names = []
+train_names= []
+for fname in filenames: 
+    x = re.match("1-.*",fname)
+    if x:
+        name = fname.split('.')[0]
+        test_names.append(name)
+    else:
+        name = fname.split('.')[0]
+        train_names.append(name)
+
+#only run this part once, otherwise just wastes time
+#for name in test_names:
+#    create_spectrogram_test(directory+"\\"+name+".wav",name)
     
-
-
-Data_dir=np.array(glob("../input/train/Train/*"))
-%load_ext memory_profiler
-%%memit 
-i=0
-for file in Data_dir[i:i+2000]:
-    #Define the filename as is, "name" refers to the JPG, and is split off into the number itself. 
-    filename,name = file,file.split('/')[-1].split('.')[0]
-    create_spectrogram(filename,name)
-gc.collect()
-%%memit 
-i=2000
-for file in Data_dir[i:i+2000]:
-    filename,name = file,file.split('/')[-1].split('.')[0]
-    create_spectrogram(filename,name)
-gc.collect()
-%%memit 
-i=4000
-for file in Data_dir[i:]:
-    filename,name = file,file.split('/')[-1].split('.')[0]
-    create_spectrogram(filename,name)
-gc.collect()
-
-
-
-Test_dir=np.array(glob("../input/test/Test/*"))
-%%memit 
-i=0
-for file in Test_dir[i:i+1500]:
-    filename,name = file,file.split('/')[-1].split('.')[0]
-    create_spectrogram_test(filename,name)
-gc.collect()
-%%memit 
-i=1500
-for file in Test_dir[i:]:
-    filename,name = file,file.split('/')[-1].split('.')[0]
-    create_spectrogram_test(filename,name)
-gc.collect()
-
+#for name in train_names:
+#    create_spectrogram_train(directory+"\\"+name+".wav",name)
 
 
 from keras_preprocessing.image import ImageDataGenerator
 
 def append_ext(fn):
-    return fn+".jpg"
+    name = fn.split(".")[0]
+    return name+".png"
 
-traindf=pd.read_csv('../input/train.csv',dtype=str)
-testdf=pd.read_csv('../input/test.csv',dtype=str)
-traindf["ID"]=traindf["ID"].apply(append_ext)
-testdf["ID"]=testdf["ID"].apply(append_ext)
+
+datadf=pd.read_csv('../ESC-50/meta/esc50.csv')
+datadf["filename"]=datadf["filename"].apply(append_ext)
+
+traindf = datadf[datadf["fold"] != 1]
+testdf = datadf[datadf["fold"] == 1]
+print(traindf.head())
+print(testdf.head())
+
 
 datagen=ImageDataGenerator(rescale=1./255.,validation_split=0.25)
 
 
 train_generator=datagen.flow_from_dataframe(
     dataframe=traindf,
-    directory="/kaggle/working/train/",
-    x_col="ID",
-    y_col="Class",
+    directory=directory2+"\\train_files",
+    x_col="filename",
+    y_col="category",
     subset="training",
     batch_size=32,
     seed=42,
@@ -135,15 +126,16 @@ train_generator=datagen.flow_from_dataframe(
 
 valid_generator=datagen.flow_from_dataframe(
     dataframe=traindf,
-    directory="/kaggle/working/train/",
-    x_col="ID",
-    y_col="Class",
+    directory=directory2+"\\train_files",
+    x_col="filename",
+    y_col="category",
     subset="validation",
     batch_size=32,
     seed=42,
     shuffle=True,
     class_mode="categorical",
     target_size=(64,64))
+
 
 
 from keras.layers import Dense, Activation, Flatten, Dropout, BatchNormalization
@@ -177,7 +169,7 @@ model.add(Flatten())
 model.add(Dense(512))
 model.add(Activation('relu'))
 model.add(Dropout(0.5))
-model.add(Dense(10, activation='softmax'))
+model.add(Dense(50, activation='softmax'))
 model.compile(optimizers.rmsprop(lr=0.0005, decay=1e-6),loss="categorical_crossentropy",metrics=["accuracy"])
 model.summary()
 
@@ -194,3 +186,35 @@ model.fit_generator(generator=train_generator,
 )
 model.evaluate_generator(generator=valid_generator, steps=STEP_SIZE_VALID
 )
+
+
+test_datagen=ImageDataGenerator(rescale=1./255.)
+test_generator=test_datagen.flow_from_dataframe(
+    dataframe=testdf,
+    directory=directory2+"\\test_files",
+    x_col="filename",
+    y_col=None,
+    batch_size=32,
+    seed=42,
+    shuffle=False,
+    class_mode=None,
+    target_size=(64,64))
+STEP_SIZE_TEST=test_generator.n//test_generator.batch_size
+
+test_generator.reset()
+pred=model.predict_generator(test_generator,
+                             steps=STEP_SIZE_TEST,
+                             verbose=1)
+predicted_class_indices=np.argmax(pred,axis=1)
+
+#Fetch labels from train gen for testing
+labels = (train_generator.class_indices)
+labels = dict((v,k) for k,v in labels.items())
+predictions = [labels[k] for k in predicted_class_indices]
+
+print(predictions[0:6])
+
+testlabels = testdf["category"].tolist()
+comparison = [predictions[i] == testlabels[i] for i in predicted_class_indices]
+accuracy = sum(comparison)/len(comparison)
+print(accuracy)
