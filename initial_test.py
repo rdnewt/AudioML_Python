@@ -29,8 +29,9 @@ import gc
 #name = "1-137-A-32"
 
 directory = r"C:\Users\rrhoa\Documents\Classes\EEE488\ESC-50\audio"
-directory2 = r"C:\Users\rrhoa\Documents\Classes\EEE488\ESC_capstone"
+directory2 = r"C:\Users\rrhoa\Documents\Classes\EEE488\AudioML_Python"
 
+#Function to create spectrogram and place in the test folder
 def create_spectrogram_test(filename,name):
     plt.interactive(False)
     clip, sample_rate = librosa.load(filename, sr=None)
@@ -41,7 +42,7 @@ def create_spectrogram_test(filename,name):
     ax.set_frame_on(False)
     S = librosa.feature.melspectrogram(y=clip, sr=sample_rate)
     librosa.display.specshow(librosa.power_to_db(S, ref=np.max))
-    filename  = r"C:\Users\rrhoa\Documents\Classes\EEE488\ESC_capstone\test_files\\" + name + ".png"
+    filename  = r"C:\Users\rrhoa\Documents\Classes\EEE488\AudioML_Python\test_files\\" + name + ".png"
     fig.savefig(filename, dpi=400, bbox_inches='tight',pad_inches=0)
     plt.close()    
     fig.clf()
@@ -49,6 +50,7 @@ def create_spectrogram_test(filename,name):
     plt.close('all')
     del filename,name,clip,sample_rate,fig,ax,S
 
+#Function to create spectrogram and place in the train folder
 def create_spectrogram_train(filename,name):
     plt.interactive(False)
     clip, sample_rate = librosa.load(filename, sr=None)
@@ -59,7 +61,7 @@ def create_spectrogram_train(filename,name):
     ax.set_frame_on(False)
     S = librosa.feature.melspectrogram(y=clip, sr=sample_rate)
     librosa.display.specshow(librosa.power_to_db(S, ref=np.max))
-    filename  = r"C:\Users\rrhoa\Documents\Classes\EEE488\ESC_capstone\train_files\\" + name + ".png"
+    filename  = r"C:\Users\rrhoa\Documents\Classes\EEE488\AudioML_Python\train_files\\" + name + ".png"
     fig.savefig(filename, dpi=400, bbox_inches='tight',pad_inches=0)
     plt.close()    
     fig.clf()
@@ -82,6 +84,7 @@ for fname in filenames:
         name = fname.split('.')[0]
         train_names.append(name)
 
+#Creates the spectrograms for training and testing
 #only run this part once, otherwise just wastes time
 #for name in test_names:
 #    create_spectrogram_test(directory+"\\"+name+".wav",name)
@@ -92,11 +95,12 @@ for fname in filenames:
 
 from keras_preprocessing.image import ImageDataGenerator
 
+#Updates file name column to match the spectrogram instead of the audio file
 def append_ext(fn):
     name = fn.split(".")[0]
     return name+".png"
 
-
+#Reads in the ESC-50 metadata
 datadf=pd.read_csv('../ESC-50/meta/esc50.csv')
 datadf["filename"]=datadf["filename"].apply(append_ext)
 
@@ -113,7 +117,7 @@ train_generator=datagen.flow_from_dataframe(
     dataframe=traindf,
     directory=directory2+"\\train_files",
     x_col="filename",
-    y_col="category",
+    y_col="major_category",
     subset="training",
     batch_size=32,
     seed=42,
@@ -125,7 +129,7 @@ valid_generator=datagen.flow_from_dataframe(
     dataframe=traindf,
     directory=directory2+"\\train_files",
     x_col="filename",
-    y_col="category",
+    y_col="major_category",
     subset="validation",
     batch_size=32,
     seed=42,
@@ -166,7 +170,7 @@ model.add(Flatten())
 model.add(Dense(512))
 model.add(Activation('relu'))
 model.add(Dropout(0.5))
-model.add(Dense(50, activation='softmax'))
+model.add(Dense(5, activation='softmax'))
 model.compile(optimizers.rmsprop(lr=0.0005, decay=1e-6),loss="categorical_crossentropy",metrics=["accuracy"])
 model.summary()
 
@@ -185,6 +189,7 @@ model.evaluate_generator(generator=valid_generator, steps=STEP_SIZE_VALID
 )
 
 
+#Create test dataset to evaluate model
 test_datagen=ImageDataGenerator(rescale=1./255.)
 test_generator=test_datagen.flow_from_dataframe(
     dataframe=testdf,
@@ -198,6 +203,7 @@ test_generator=test_datagen.flow_from_dataframe(
     target_size=(64,64))
 STEP_SIZE_TEST=test_generator.n//test_generator.batch_size
 
+#Predict the model for the testing data
 test_generator.reset()
 pred=model.predict_generator(test_generator,
                              steps=STEP_SIZE_TEST,
@@ -209,9 +215,8 @@ labels = (train_generator.class_indices)
 labels = dict((v,k) for k,v in labels.items())
 predictions = [labels[k] for k in predicted_class_indices]
 
-print(predictions[0:6])
-
-testlabels = testdf["category"].tolist()
+testlabels = testdf["major_category"].tolist()
 comparison = [predictions[i] == testlabels[i] for i in predicted_class_indices]
 accuracy = sum(comparison)/len(comparison)
-print(accuracy)
+print(accuracy) #Prints final accuracy of the model based on test data
+#Resulted in 49% for fold 1 and 51% for fold 2, at which point I stopped
