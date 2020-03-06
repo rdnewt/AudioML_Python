@@ -9,7 +9,7 @@ import numpy as np
 from scipy.io import wavfile
 
 ### our custom module with all of our function
-#import audioml as aml
+#import amltools as aml
 
 
 class sample:
