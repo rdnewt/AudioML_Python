@@ -123,7 +123,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 i = '<span style=\" color: #ff0000;\">%s</span>' % i
                 self.allWav = False
             self.fileView.append(i)
-
+    
+    
+    # Here is where you'll put the functions for the short, long, and live audio inputs.
+    # When selecting files, the path to the file is stored in the list names and can be called/itterated through like so:
+    # for i in length(self.names):
+    #   print(self.names[i])               < this will print the file path
     def goFunc(self):
         print("stuff")
         if self.shortAudioRadio.isChecked():
