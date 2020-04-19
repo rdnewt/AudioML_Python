@@ -63,3 +63,4 @@ for name in fnames:
     #for saving files
     outname = output_path+"\\"+name[0:-4]+"_spectro"        # specify output file full name (path + filename)
     np.save(outname,spectro)          # save array
+    spectro = np.zeros((256,216))
