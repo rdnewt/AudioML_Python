@@ -8,14 +8,13 @@
 
 import os
 import sys
-from pyqtgraph import PlotWidget, plot
 import pyqtgraph as pg
 from PyQt5 import QtCore, QtGui, QtWidgets, QtTest
-import random
 import numpy as np
 import scipy.io.wavfile as wav
-import matplotlib.pyplot as plt
-
+import math as m
+import pyaudio
+import struct
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -347,6 +346,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def goFunc(self):
         self.ImageWindow.show()
         self.ClassificationList = []
+
+
+
         #####################
         #### SHORT AUDIO ####
         #####################
@@ -366,6 +368,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.ImageWindow.ExitTrue = False
 
             #Renaming the pause button to be "speed up" to skip the 3 second wait after every file is processed
+            self.ImageWindow.pauseResumeButton.clicked.disconnect()
             _translate = QtCore.QCoreApplication.translate
             self.ImageWindow.pauseResumeButton.setText(_translate("ImageWindow", "Speed Up"))
             self.ImageWindow.pauseResumeButton.clicked.connect(self.ImageWindow.SpeedUpProcess)
@@ -405,6 +408,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 #Creating a graph for the actual wave
                 WavY = dat
                 WavX = np.array(range(len(WavY)))
+                self.ImageWindow.waveGraph.setYRange(np.min(WavY), np.max(WavY))
                 self.ImageWindow.waveGraph.plot(WavX, WavY, clear=True)
                 self.ImageWindow.update()
 
@@ -470,51 +474,230 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         ####################
         #### LONG AUDIO ####
         ####################
-        # If short audio is checked, do this
+        # If long audio is checked, do this
         elif self.longAudioRadio.isChecked():
+            # Error detector: not a wav file or no files selected
             if self.allWav == False:
                 self.labelView.setText("ERROR: Some files are not in .wav format")
                 return
+            elif self.names == []:
+                self.labelView.setText("ERROR: No files selected")
+                return
+
+            # Initializing button states for this itteration of short audio. False means the button has not been clicked before
             self.ImageWindow.PauseTrue = False
             self.ImageWindow.ExitTrue = False
-            T = 0
-            SpectroX = []
-            SpectroY = []
-            while True:
 
-                #If Exit button or the image window closes for some reason, exit the loop.
+            # Renaming the pause button to be "speed up" to skip the 3 second wait after every file is processed
+            self.ImageWindow.pauseResumeButton.clicked.disconnect()
+            _translate = QtCore.QCoreApplication.translate
+            self.ImageWindow.pauseResumeButton.setText(_translate("ImageWindow", "Speed Up"))
+            self.ImageWindow.pauseResumeButton.clicked.connect(self.ImageWindow.SpeedUpProcess)
+
+            # Global variables for spectrogram generation
+            pts_fft = 1024
+            spectro = np.zeros((256, 216))
+
+            # Change fnames out for self.names
+            for name in self.names:
+
+                # If exiting the graphing window in any way, this will prevent the code from looping unintentionally
                 if self.ImageWindow.ExitTrue or (not self.ImageWindow.isVisible()):
-                    print("button clicked")
+                    print("Exited out of graphing window")
                     return
 
-                #If Pause button is pressed, skip this iteration of the loop
-                #and wait 3 seconds to see if resume is pushed
-                if self.ImageWindow.PauseTrue:
-                    print("operation paused")
-                    QtTest.QTest.qWait(3000)
-                    continue
+                # Read short audio file
+                fs, dat = wav.read(name)  # read in .wav file
 
-                # currently for testing
-                SpectroX.append(T)
-                T += 1
-                Y = random.randint(1, 20)
-                SpectroY.append(Y)
+                # this section performs a check to see if the .wav file is stereo (2-channels)
+                # and averages the 2 to a single channel if that is the case
+                # can be commented out if all the files are now mono format
+                if len(np.shape(dat)) == 2:
+                    print("")
+                    dat = dat.astype(float)
+                    dat = (dat[:, 0] + dat[:, 1]) // 2
+                    dat = dat.astype('int16')
 
-                self.ImageWindow.SpectroGraph.plot(SpectroX, SpectroY, clear=True)
-                self.ImageWindow.update()
-                QtGui.QGuiApplication.processEvents()
-                QtTest.QTest.qWait(3000)
+                # Honestly I don't know. Ask Sam
+                dat = np.pad(dat, (0, pts_fft - len(dat) % pts_fft))
 
-            # DO LONG AUDIO FUNC
-            print("long is pressed")
+                # Making sure every audio file is exactly 5 seconds long
+                testing_length = m.ceil(len(dat)/fs - 4)
+                for i in range(testing_length):
+                    if self.ImageWindow.ExitTrue or (not self.ImageWindow.isVisible()):
+                        print("Exited out of graphing window")
+                        return
+                    newInit = fs * i
+                    newEnd = fs * (i + 5)
+                    newDat = dat[newInit:newEnd]
+                    if len(newDat) / fs != 5.0:
+                        newDat = np.pad(newDat, (0, fs * 5 - len(newDat)), 'constant', constant_values=(0, 0))
+
+                    # Creating a graph for the actual wave
+                    WavY = newDat
+                    test = range(len(WavY))
+                    test = [i/fs for i in test]
+                    WavX = np.array(test)
+                    self.ImageWindow.waveGraph.setYRange(np.min(WavY), np.max(WavY))
+                    self.ImageWindow.waveGraph.plot(WavX, WavY, clear=True)
+                    self.ImageWindow.update()
+
+                    # generate window
+                    window = np.hamming(pts_fft)
+                    # compute spectrograms and load into spectro field
+                    for k in range(len(newDat) // pts_fft):
+                        a = np.fft.fft(newDat[k:k + pts_fft] * window)
+                        b = abs(a[0:pts_fft // 4])
+                        b = 20 * np.log10(b)
+                        spectro[:, k] = b
+                    f = np.arange(0, fs / 4, fs / pts_fft)
+                    t = np.arange(0, (fs * 5 // pts_fft + 1) * pts_fft / (fs), pts_fft / fs)
+
+                    # Displaying the spectrogram in the spectrogram graph
+                    self.ImageWindow.DisplaySpectrogram(t, f, spectro)
+
+                    #############################################################
+                    ###### PUT THE NEURAL NETWORK CLASSIFICATION STUFF HERE #####
+                    #############################################################
+
+                    newLabel = "test"  # Put the classification of the audio file here
+                    intoFile = name + " at timestamp " + str(i) + " seconds is " + newLabel
+                    print(intoFile)
+                    self.ClassificationList.append(newLabel)
+                    self.ImageWindow.UpdateLabel(newLabel)
+                    self.labelView.append(newLabel)
+
+                    # This line ensures that the graph updating above will take place
+                    QtGui.QGuiApplication.processEvents()
+
+                    # Will wait 3 seconds every file unless the speed up (PauseButton) is pressed.
+                    if not self.ImageWindow.PauseTrue:
+                        QtTest.QTest.qWait(3000)
+                    else:
+                        continue
 
         ####################
         #### LIVE AUDIO ####
         ####################
         # If short audio is checked, do this
         elif self.liveAudioRadio.isChecked():
+
+            self.ImageWindow.PauseTrue = False
+            self.ImageWindow.ExitTrue = False
+            # self.ImageWindow.pauseResumeButton.clicked.disconnect()
+            self.ImageWindow.pauseResumeButton.clicked.connect(self.ImageWindow.PauseImageWindow)
+            CHUNK = 1024
+            FORMAT = pyaudio.paInt16
+            CHANNELS = 1
+            RATE = 44100
+
+            p = pyaudio.PyAudio()
+
+            chosen_device_index = -1
+            for x in range(0, p.get_device_count()):
+                info = p.get_device_info_by_index(x)
+                # print p.get_device_info_by_index(x)
+                if info["name"] == "pulse":
+                    chosen_device_index = info["index"]
+                    print("Chosen index: ", chosen_device_index)
+
+            stream = p.open(format=FORMAT,
+                            channels=CHANNELS,
+                            rate=RATE,
+                            input_device_index=chosen_device_index,
+                            input=True,
+                            output=True,
+                            frames_per_buffer=CHUNK
+                            )
+            BUFFER = np.zeros(RATE * 5, dtype='int')
+            WavX = np.array(range(len(BUFFER)))
+
+            pts_fft = 1024
+            spectro = np.zeros((256, 216))
+            k1 = 0
+            firstSpectro = False
+            time = 0
+            time2 = 0
+            while True:
+                if self.ImageWindow.ExitTrue or (not self.ImageWindow.isVisible()):
+                    print("Exited out of graphing window")
+                    return
+                if self.ImageWindow.PauseTrue:
+                    QtGui.QGuiApplication.processEvents()
+                    print("Paused")
+                    continue
+                chunk = struct.unpack(str(CHUNK) + 'h', stream.read(CHUNK))
+                chunky = list(chunk)
+                BUFFER = np.roll(BUFFER, -CHUNK)
+                BUFFER[RATE * 5 - CHUNK:] = chunky
+                self.ImageWindow.waveGraph.setYRange(np.min(BUFFER), np.max(BUFFER))
+                self.ImageWindow.waveGraph.plot(WavX, BUFFER, clear=True)
+                self.ImageWindow.update()
+
+                # generate window
+                window = np.hamming(pts_fft)
+                k1 += CHUNK
+                # compute spectrograms and load into spectro field
+                f = np.arange(0, RATE / 4, RATE / pts_fft)
+                t = np.arange(0, (RATE * 5 // pts_fft + 1) * pts_fft / (RATE), pts_fft / RATE)
+                if k1 >= RATE*5 and not firstSpectro:
+                    firstSpectro = True
+                    for i in range(len(BUFFER) // pts_fft):
+                        a = np.fft.fft(BUFFER[i:i + pts_fft] * window)
+                        b = abs(a[0:pts_fft // 4])
+                        b = 20 * np.log10(b)
+                        spectro[:, i] = b
+
+                    time = k1 / RATE
+
+                    k1 = 0
+                    # Displaying the spectrogram in the spectrogram graph
+                    self.ImageWindow.DisplaySpectrogram(t, f, spectro)
+
+                    #############################################################
+                    ###### PUT THE NEURAL NETWORK CLASSIFICATION STUFF HERE #####
+                    #############################################################
+
+                    newLabel = "car_horn"  # Put the classification of the audio file here
+                    intoFile = "Identified " + newLabel + " at 0-" + str(m.floor(time)) + " seconds."
+                    self.ClassificationList.append(intoFile)
+                    self.ImageWindow.UpdateLabel(newLabel)
+                    self.labelView.append(intoFile)
+
+
+                elif k1 >= RATE and firstSpectro:
+                    for i in range(len(BUFFER) // pts_fft):
+                        a = np.fft.fft(BUFFER[i:i + pts_fft] * window)
+                        b = abs(a[0:pts_fft // 4])
+                        b = 20 * np.log10(b)
+                        spectro[:, i] = b
+
+                    time = time + 1
+                    time2 = time2 + 1
+                    k1 = k1 - RATE
+
+                    # Displaying the spectrogram in the spectrogram graph
+                    self.ImageWindow.DisplaySpectrogram(t, f, spectro)
+
+                    #############################################################
+                    ###### PUT THE NEURAL NETWORK CLASSIFICATION STUFF HERE #####
+                    #############################################################
+
+                    newLabel = "car_horn"  # Put the classification of the audio file here
+                    intoFile = "Identified " + newLabel + " at " + str(time2) + "-" + str(m.floor(time)) + " seconds."
+                    self.ClassificationList.append(intoFile)
+                    self.ImageWindow.UpdateLabel(newLabel)
+                    self.labelView.append(intoFile)
+
+
+
+
+
+                QtGui.QGuiApplication.processEvents()
+
             # DO LIVE AUDIO FUNC
             print("live is pressed")
+
 
     # def newSpectroImage(self, path="Q:/Guns/not_this.jpg"):
     #     spectroPiximap = QtGui.QPixmap(path)
@@ -528,8 +711,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
 
 if __name__ == "__main__":
-    import sys
-
     app = QtWidgets.QApplication(sys.argv)
 
     ui = MainWindow()
